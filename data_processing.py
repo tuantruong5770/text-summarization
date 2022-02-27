@@ -136,17 +136,3 @@ if __name__ == '__main__':
     # Process and save the 2 data into default directory './data'
     ProcessedDataset(dataset='cnn_dailymail')
     ProcessedDataset(dataset='billsum')
-
-
-
-
-
-
-
-
-
-
-
-
-
-

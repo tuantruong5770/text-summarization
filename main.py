@@ -8,4 +8,3 @@ def test_built_with_gpu():
 
 if __name__ == '__main__':
     pass
-
