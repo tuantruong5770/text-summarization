@@ -8,7 +8,7 @@ import torch.nn.functional as F
 
 
 class SentenceEncoder(nn.Module):
-    def __init__(self, n_hidden: int, embedding_model):
+    def __init__(self, n_hidden: int, emb_dim: int, embedding_model):
         '''
         The initiator of sentence encoder is to prepare tokenized sentences and
         Word2Vec model.
@@ -16,14 +16,15 @@ class SentenceEncoder(nn.Module):
         n_hidden: The output size of convolutionary network window.
         embedding_model: the word2vec model used for
         '''
-        super().__init__
+        super().__init__()
 
         # word embedding argument
         self.embedding_model = embedding_model
 
         # sentence encodding argument
         self.n_hidden = n_hidden
-        self._convs_wd_size = range(3, 6)
+        self._convs = nn.ModuleList([nn.Conv1d(emb_dim, n_hidden, i)
+                                     for i in range(3, 6)])
 
     def forward(self, _input):
         '''encode the input sentence'''
@@ -33,11 +34,8 @@ class SentenceEncoder(nn.Module):
         emb_dim = len(sent_words_vec[0])
         conv_in = torch.tensor(sent_words_vec).reshape(1, emb_dim, sent_length)
         temp = []
-        for size in self._convs_wd_size:
-            if sent_length < size:
-                size = sent_length
-            module = nn.Conv1d(emb_dim, self.n_hidden, size)
-            temp.append(module(conv_in))
+        for conv in self._convs:
+            temp.append(conv(conv_in))
         output = torch.cat([F.relu(res).max(dim=2)[0]
                             for res in temp], dim=1).reshape((3 * self.n_hidden))
         return output
