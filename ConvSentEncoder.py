@@ -70,6 +70,6 @@ def main():
                              vector_size=emb_dim, window=wd, sg=sg)
 
     s = SentenceEncoder(n_hidden, encoded_words)
-    s.forward(tokenized_sents[0])
+    print(s.forward(tokenized_sents[0]))
 
 
