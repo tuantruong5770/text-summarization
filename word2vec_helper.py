@@ -1,6 +1,9 @@
 from gensim.models import Word2Vec
 from data_processing import ProcessedDataset
-from torch import FloatTensor, IntTensor
+
+import torch
+
+PADDING_INDEX = 0
 
 
 class Word2VecHelper:
@@ -42,20 +45,32 @@ class Word2VecHelper:
         :param model: trained Word2Vec model
         :return: FloatTensor([vocab_size, emb_size])
         """
-        return FloatTensor(model.wv.vectors)
+        return torch.FloatTensor(model.wv.vectors)
 
 
     @staticmethod
-    def text_to_id(processed_text, model):
+    def text_to_id(processed_text, model, pad, cuda=True):
         """
         Convert processed text into processed word index according to given Word2Vec model
         Use for nn.Embedding indexing purposes
+
         :param processed_text: List(List(str)) of processed text
         :param model: trained Word2Vec model
-        :return: List(IntTensor())
+        :param pad: padding index
+        :param cuda: True if built with cuda
+        :return: IntTensor(IntTensor())
         """
         word_to_index = model.wv.key_to_index
-        return [IntTensor([word_to_index[w] for w in sentence]) for sentence in processed_text]
+        inputs = [torch.IntTensor([word_to_index[w] for w in sentence]) for sentence in processed_text]
+        tensor_type = torch.cuda.IntTensor if cuda else torch.IntTensor
+        num_sentence = len(inputs)
+        max_len = max(len(ids) for ids in inputs)
+        tensor_shape = (num_sentence, max_len)
+        tensor = tensor_type(*tensor_shape)
+        tensor.fill_(pad)
+        for i, ids in enumerate(inputs):
+            tensor[i, :len(ids)] = tensor_type(ids)
+        return tensor
 
 
 if __name__ == "__main__":
