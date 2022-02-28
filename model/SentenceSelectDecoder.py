@@ -64,29 +64,3 @@ class LSTMDecoder(nn.Module):
 
     def init_hidden(self):
         return torch.zeros(1, 1, self.lstm_dim), torch.zeros(1, 1, self.lstm_dim)
-
-
-
-
-torch.manual_seed(0)
-
-model = LSTMDecoder(20, 25, 30, 10)
-hj = torch.rand(15, 20)
-hidden = model.init_hidden()
-
-p, hidden = model(hj[0], hidden, hj)
-
-print(p.size())
-print(p)
-
-# t = torch.rand(10)
-# m = nn.LSTM(10, 15)
-# out, hidden = m(t.view(1,1,-1))
-# out, hidden = m(t.view(1,1,-1), hidden)
-# print(out.size())
-# print(hidden[0].size())
-# print(hidden[1].size())
-
-
-
-
