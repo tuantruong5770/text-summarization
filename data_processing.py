@@ -1,12 +1,14 @@
+from ignite.metrics import RougeL
+from cytoolz import curry
+
 import tensorflow_datasets as tfds
 import nltk
 import torch
-from ignite.metrics import RougeL
-from cytoolz import curry
 import json
 import os
 
 
+# Ignore misc. tensorflow warnings
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 
@@ -16,9 +18,9 @@ class ProcessData:
         """
         Split text to sentence and words
         :param text: Unprocessed str
-        :return: List(List())
+        :return: List(List(str))
         """
-        return [sent.strip('.').split() for sent in nltk.sent_tokenize(text)]
+        return [nltk.word_tokenize(sent) for sent in nltk.sent_tokenize(text)]
 
 
 class ProcessedDataset:
@@ -60,8 +62,8 @@ class ProcessedDataset:
         self._process_data_dir = processed_data_dir
         self._text_key = ProcessedDataset.key_map[self._name][0]
         self._summ_key = ProcessedDataset.key_map[self._name][1]
-        self.dataset = []
 
+        # self.dataset is initialized in self._load_data()
         self._load_data()
 
 
@@ -120,8 +122,31 @@ class ProcessedDataset:
         return processed_data
 
 
+    def get_dataset_name(self):
+        return self._name
+
     def get_dataset(self):
         return self.dataset
+
+
+    def get_entry(self, i):
+        return self.dataset[i]
+
+
+    def get_text(self, i):
+        return self.dataset[i][self._text_key]
+
+
+    def get_summary(self, i):
+        return self.dataset[i][self._summ_key]
+
+
+    def get_label(self, i):
+        return self.dataset[i]['label']
+
+
+    def get_score(self, i):
+        return self.dataset[i]['score']
 
 
     def get_num_sentences(self, i):
@@ -130,6 +155,10 @@ class ProcessedDataset:
 
     def get_num_words(self, i, j):
         return len(self.dataset[i][self._text_key][j])
+
+
+    def __len__(self):
+        return len(self.dataset)
 
 
 if __name__ == '__main__':
