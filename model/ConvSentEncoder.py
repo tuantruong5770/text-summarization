@@ -8,22 +8,21 @@ import torch.nn.functional as F
 
 
 class SentenceEncoder(nn.Module):
-    KERNEL = [3, 4, 5]
-
-    def __init__(self, emb_weights, emb_dim, n_hidden, dropout):
+    def __init__(self, emb_weights, emb_dim, n_hidden, kernel, dropout, training=True):
         """
         Convolutional neural network for sentence encoding.
 
         :param emb_weights: pretrained weights of the Word2Vec model
         :param emb_dim: dimension of word embeddings
         :param n_hidden: number of hidden nodes
+        :param kernel: list of kernel sizes
         :param dropout: prob. out zeroing word_vector[i-th]
         """
         super().__init__()
         self._embedding = nn.Embedding.from_pretrained(emb_weights)
-        self.n_hidden = n_hidden
+        self.training = training
         self._dropout = dropout
-        self._convs = nn.ModuleList([nn.Conv1d(emb_dim, n_hidden, i) for i in SentenceEncoder.KERNEL])
+        self._convs = nn.ModuleList([nn.Conv1d(emb_dim, n_hidden, i) for i in kernel])
 
 
     def forward(self, _input):
@@ -53,6 +52,7 @@ if __name__ == "__main__":
     n_hidden = 20
     wd = 10
     sg = 0
+    kernel_list = [3, 4, 5]
 
     with open("alice.txt") as f:
         text = f.read()
@@ -70,8 +70,8 @@ if __name__ == "__main__":
         tokenized_sents.append(temp)
 
     model = Word2Vec(sentences=tokenized_sents, min_count=1, vector_size=emb_dim, window=wd, sg=sg)
-    encoder = SentenceEncoder(torch.FloatTensor(model.wv.vectors), emb_dim, n_hidden, 0.5)
+    encoder = SentenceEncoder(torch.FloatTensor(model.wv.vectors), emb_dim, n_hidden, kernel_list, 0.0)
     sent_ids = Word2VecHelper.text_to_id(tokenized_sents, model)
+    print(model.wv.key_to_index)
     # Test on first sentence of the text
-    assert encoder.forward(sent_ids[0]).shape == torch.Size([1, n_hidden * len(SentenceEncoder.KERNEL)])
     print(encoder.forward(sent_ids[0]))
