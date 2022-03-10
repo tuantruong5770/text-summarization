@@ -1,5 +1,8 @@
-from ignite.metrics import RougeL
 from cytoolz import curry
+from nltk.stem import WordNetLemmatizer
+from nltk.corpus import wordnet, stopwords
+from ignite.metrics import RougeL
+from utils import timer
 
 import tensorflow_datasets as tfds
 import nltk
@@ -13,14 +16,82 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 
 class ProcessData:
+    lemmatizer = WordNetLemmatizer()
+    stop_word = stopwords.words('english')
+
+
     @staticmethod
-    def process(text):
+    def process_tokenize(text):
         """
-        Split text to sentence and words
-        :param text: Unprocessed str
+        Split text to sentence and words. Lower case all words
+
+        :param text: str
         :return: List(List(str))
         """
-        return [nltk.word_tokenize(sent) for sent in nltk.sent_tokenize(text)]
+        return [nltk.word_tokenize(sent.lower()) for sent in nltk.sent_tokenize(text)]
+
+
+    @staticmethod
+    def process_lemmatize(processed_text):
+        """
+        Lemmatize processed text
+
+        :param processed_text: List(List(str))
+        :return List(List(str))
+        """
+        processed_lemmatize_text = []
+        for i, sent in enumerate(processed_text):
+            nltk_tagged = nltk.pos_tag(sent)
+            wordnet_tagged = map(lambda x: (x[0], ProcessData.nltk_pos_tagger(x[1])), nltk_tagged)
+            processed_sent = []
+
+            for j, (word, tag) in enumerate(wordnet_tagged):
+                processed_sent.append(ProcessData.lemmatizer.lemmatize(word, tag) if tag else word)
+
+            processed_lemmatize_text.append(processed_sent)
+
+        return processed_lemmatize_text
+
+
+    @staticmethod
+    def process_remove_stop_word(processed_text):
+        """
+        Remove stop word in processed text. Might omit sentences
+        Mapping is map of processed_remove_stop word_text sentence index to original processed_text sentence index
+
+        :param processed_text: List(List(str))
+        :return: List(List(str)), Dict(int:int)
+        """
+        mapping = dict()
+        mapping_index = 0
+        processed_remove_stop_word_text = []
+        for i, sent in enumerate(processed_text):
+            processed_sent = []
+
+            for word in sent:
+                if word not in ProcessData.stop_word and word.isalnum():
+                    processed_sent.append(word)
+
+            if processed_sent:
+                processed_remove_stop_word_text.append(processed_sent)
+                mapping[mapping_index] = i
+                mapping_index += 1
+
+        return processed_remove_stop_word_text, mapping
+
+
+    @staticmethod
+    def nltk_pos_tagger(nltk_tag):
+        if nltk_tag.startswith('J'):
+            return wordnet.ADJ
+        elif nltk_tag.startswith('V'):
+            return wordnet.VERB
+        elif nltk_tag.startswith('N'):
+            return wordnet.NOUN
+        elif nltk_tag.startswith('R'):
+            return wordnet.ADV
+        else:
+            return None
 
 
 class ProcessedDataset:
@@ -28,7 +99,8 @@ class ProcessedDataset:
     key_map = {'cnn_dailymail': ('article', 'highlights'), 'billsum': ('text', 'summary')}
 
 
-    def __init__(self, dataset='cnn_dailymail', data_dir='./data', processed_data_dir='./data/processed', split='train'):
+    def __init__(self, dataset='cnn_dailymail', data_dir='./data', processed_data_dir='./data/processed',
+                 split='train'):
         """
         Load the dataset and save into self.dataset
 
@@ -60,6 +132,9 @@ class ProcessedDataset:
 
         self._data_dir = data_dir
         self._process_data_dir = processed_data_dir
+
+        self._file_dir = f'{self._process_data_dir}/{self._name}_{self._split}.json'
+
         self._text_key = ProcessedDataset.key_map[self._name][0]
         self._summ_key = ProcessedDataset.key_map[self._name][1]
 
@@ -70,60 +145,86 @@ class ProcessedDataset:
     def _load_data(self):
         print(f'Loading {self._name} dataset...')
         try:
-            with open(self._process_data_dir + f'/{self._name}_{self._split}.json') as f:
-                print(f'Found available preprocessed {self._name} {self._split} dataset. Loading...')
+            with open(self._file_dir) as f:
+                print(f'Found preprocessed {self._name} {self._split} dataset with specified options. Loading...')
                 self.dataset = json.load(f)
-                print(f'{self._name} {self._split} dataset loaded successfully. Dataset containing {len(self.dataset)} entries.')
+                print(f'{self._file_dir} dataset loaded successfully. Dataset containing {len(self.dataset)} entries.')
         except FileNotFoundError:
-            print(f'Processing dataset and saving at "{self._process_data_dir}/{self._name}_{self._split}.json"...')
+            print(f'Processing dataset and saving at "{self._file_dir}" ...')
             self.dataset = self._process_data()
-            print(f'{self._name} {self._split} dataset loaded successfully. Dataset containing {len(self.dataset)} entries.')
+            print(f'{self._file_dir} dataset loaded successfully. Dataset containing {len(self.dataset)} entries.')
 
 
+    @timer
     def _process_data(self):
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         dataset = tfds.load(self._name, data_dir=self._data_dir, split=self._split)
         processed_data = []
-        for data in dataset:
+        rouge_calc = RougeL(device=device)
+        for i, data in enumerate(dataset):
             # Convert from tensor string to python string
             text = data[self._text_key].numpy().decode()
             summ = data[self._summ_key].numpy().decode()
             # Split text into sentences and split each sentence in to words
-            text_sent = ProcessData.process(text)
-            summ_sent = ProcessData.process(summ)
-            label = []
-            score = []
+            text_sent = ProcessData.process_tokenize(text)
+            summ_sent = ProcessData.process_tokenize(summ)
 
             # Skip data point if summary has equal or more sentences than text
-            if len(summ_sent) >= len(text_sent):
+            if len(summ_sent) >= len(text_sent) or len(summ_sent) == 0 or len(text_sent) == 0:
                 continue
 
-            # Curry to enable pre-input for the parameters to use map()
-            @curry
-            def evaluate(references, candidate, metric):
-                metric.update(([candidate], [[references]]))
-                return metric.compute()['Rouge-L-R']
+            # Lemmatize texts
+            text_sent_lemmatize = ProcessData.process_lemmatize(text_sent)
+            summ_sent_lemmatize = ProcessData.process_lemmatize(summ_sent)
 
-            m = RougeL(device=device)
-            available_index = list(range(len(text_sent)))
-            for sent in summ_sent:
-                rouge = list(map(evaluate(candidate=sent, metric=m), text_sent))
-                text_index = max(available_index, key=lambda i: rouge[i])
-                label.append(text_index)
-                score.append(rouge[text_index])
-                available_index.remove(text_index)
+            # Remove stop word
+            text_sent_rem_stop_word, text_mapping = ProcessData.process_remove_stop_word(text_sent_lemmatize)
+            summ_sent_rem_stop_word, summ_mapping = ProcessData.process_remove_stop_word(summ_sent_lemmatize)
+
+            # Skip data point if processed summary has equal or more sentences than text
+            if len(summ_sent_rem_stop_word) >= len(text_sent_rem_stop_word) or len(summ_sent_rem_stop_word) == 0 or len(
+                    text_sent_rem_stop_word) == 0:
+                continue
+
+            label, score = self._generate_label_and_score(text_sent_rem_stop_word, summ_sent_rem_stop_word,
+                                                          text_mapping, rouge_calc)
 
             processed_data.append(
                 {self._text_key: text_sent, self._summ_key: summ_sent, 'label': label, 'score': score})
 
-        # Save data and return
-        with open(self._process_data_dir + f'/{self._name}_{self._split}.json', 'w') as outfile:
+            if (i + 1) % 20000 == 0:
+                print(i)
+
+        with open(self._file_dir, 'w') as outfile:
             json.dump(processed_data, outfile)
+
         return processed_data
+
+
+    def _generate_label_and_score(self, processed_text_sent, processed_summ_sent, index_mapping, rouge_calc):
+        label = []
+        score = []
+        available_index = list(range(len(processed_text_sent)))
+        for sent in processed_summ_sent:
+            rouge = list(map(self.evaluate(references=sent, rouge_calc=rouge_calc), processed_text_sent))
+            text_index = max(available_index, key=lambda i: rouge[i])
+            label.append(index_mapping[text_index])
+            score.append(rouge[text_index])
+            available_index.remove(text_index)
+        return label, score
+
+
+    @staticmethod
+    @curry
+    def evaluate(candidate, references, rouge_calc):
+        rouge_calc.reset()
+        rouge_calc.update(([candidate], [[references]]))
+        return rouge_calc.compute()['Rouge-L-R']
 
 
     def get_dataset_name(self):
         return self._name
+
 
     def get_dataset(self):
         return self.dataset
@@ -161,7 +262,11 @@ class ProcessedDataset:
         return len(self.dataset)
 
 
+    def __getitem__(self, i):
+        return self.get_text(i), self.get_summary(i), self.get_label(i), self.get_score(i)
+
+
 if __name__ == '__main__':
     # Process and save the 2 data into default directory './data'
-    ProcessedDataset(dataset='cnn_dailymail')
-    ProcessedDataset(dataset='billsum')
+    cnn = ProcessedDataset(dataset='cnn_dailymail')
+    bill = ProcessedDataset(dataset='billsum')
