@@ -21,7 +21,6 @@ class Glimpse(nn.Module):
         self.wc = nn.Linear(1, output_size)
         self.v = nn.Linear(output_size, 1)
 
-
     def forward(self, encoded_sentences, lstm_output, coverage_vector):
         """
         Creating the e_t context vector
@@ -108,20 +107,23 @@ class LSTMDecoder(nn.Module):
         conditional_p, coverage_vector_p = self.pointer(encoded_sentences, context_vector, coverage_vector_p)
         return conditional_p, hidden, coverage_vector_g, coverage_vector_p
 
-
     def init_hidden(self):
         return (torch.zeros(self.num_layer, 1, self.lstm_dim).to(device),
                 torch.zeros(self.num_layer, 1, self.lstm_dim).to(device))
-
 
     @staticmethod
     def init_coverage_pointer(document_length):
         return torch.zeros(document_length, 1).to(device)
 
-
     @staticmethod
     def init_coverage_glimpse(document_length):
         return torch.zeros(document_length, 1).to(device)
+
+    def init_coverage_pointer(self, document_length):
+        return self.pointer.init_coverage(document_length)
+
+    def init_coverage_glimpse(self, document_length):
+        return self.glimpse.init_coverage(document_length)
 
 
 if __name__ == "__main__":
