@@ -2,6 +2,9 @@ import torch
 import torch.nn as nn
 
 
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+
 class LSTMEncoder(nn.Module):
     def __init__(self, input_dim, n_hidden, n_layer, dropout):
         """
@@ -33,7 +36,8 @@ class LSTMEncoder(nn.Module):
 
 
     def init_hidden(self):
-        return torch.zeros(self._n_layer * 2, 1, self._n_hidden), torch.zeros(self._n_layer * 2, 1, self._n_hidden)
+        return (torch.zeros(self._n_layer * 2, 1, self._n_hidden).to(device),
+                torch.zeros(self._n_layer * 2, 1, self._n_hidden).to(device))
 
 
 if __name__ == '__main__':

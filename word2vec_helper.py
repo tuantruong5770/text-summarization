@@ -1,12 +1,26 @@
 from gensim.models import Word2Vec
 from data_processing import ProcessedDataset
+from utils import timer
 
 import torch
+import numpy as np
 
-PADDING_INDEX = 0
+
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
 class Word2VecHelper:
+    @staticmethod
+    @timer
+    def train_model(dataset, **kwargs):
+        sentences = dataset.get_text(0).copy()
+        for i in range(1, len(dataset)):
+            sentences.extend(dataset.get_text(i))
+
+        word2v = Word2Vec(sentences=sentences, **kwargs)
+        return word2v
+
+
     @staticmethod
     def save_model(model_name, model):
         """
@@ -49,28 +63,42 @@ class Word2VecHelper:
 
 
     @staticmethod
-    def text_to_id(processed_text, model, pad, cuda=True):
+    def text_to_id(processed_text, word2v, pad=0):
         """
+        From Chen-Bansal codebase
+
         Convert processed text into processed word index according to given Word2Vec model
         Use for nn.Embedding indexing purposes
 
         :param processed_text: List(List(str)) of processed text
-        :param model: trained Word2Vec model
+        :param word2v: trained Word2Vec model
         :param pad: padding index
-        :param cuda: True if built with cuda
-        :return: IntTensor(IntTensor())
+        :return: LongTensor(LongTensor(Long))
         """
-        word_to_index = model.wv.key_to_index
-        inputs = [torch.IntTensor([word_to_index[w] for w in sentence]) for sentence in processed_text]
-        tensor_type = torch.cuda.IntTensor if cuda else torch.IntTensor
+        word_to_index = word2v.wv.key_to_index
+        inputs = [[word_to_index[w] for w in sentence] for sentence in processed_text]
         num_sentence = len(inputs)
         max_len = max(len(ids) for ids in inputs)
-        tensor_shape = (num_sentence, max_len)
-        tensor = tensor_type(*tensor_shape)
+        tensor = torch.LongTensor(num_sentence, max_len).to(device)
         tensor.fill_(pad)
         for i, ids in enumerate(inputs):
-            tensor[i, :len(ids)] = tensor_type(ids)
+            tensor[i, :len(ids)] = torch.LongTensor(ids).to(device)
         return tensor
+
+
+    @staticmethod
+    def text_to_vector(processed_text, word2v, pad=0):
+        """
+        Convert processed text into word vectors according to given Word2Vec model
+        Use for predicting / testing purposes
+
+        :param processed_text: List(List(str)) of processed text
+        :param word2v: trained Word2Vec model
+        :return: LongTensor(LongTensor(LongTensor(Long)))
+        """
+        index_to_vector = word2v.wv.vectors
+        id_tensor = Word2VecHelper.text_to_id(processed_text, word2v, pad)
+        return torch.FloatTensor(np.array([[index_to_vector[id] for id in word_ids] for word_ids in id_tensor])).to(device)
 
 
 if __name__ == "__main__":
@@ -85,4 +113,3 @@ if __name__ == "__main__":
     model = Word2Vec(sentences=sentences, min_count=1, vector_size=emb_dim, window=wd, sg=sg)
     Word2VecHelper.save_model('cnn_dailymail', model)
     model = Word2VecHelper.load_model('cnn_dailymail')
-
