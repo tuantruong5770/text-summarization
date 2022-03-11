@@ -101,18 +101,7 @@ class SummaryExtractor(nn.Module):
                                          pointer_size=parameters.lstm_decoder_pointer_net_n_hidden,
                                          dropout=parameters.lstm_decoder_dropout)
 
-
-    def forward(self, _input, summary_length=5, teacher_forcing=False, target=(), predict=False):
-        """
-        Output LongTensor(LongTensor()) of summary sentences probability vectors
-
-        :param _input: IntTensor(IntTensor()) of torch.Size([num_sent, max_sent_len])
-        :param summary_length: number of summary sentences to extract, len(target) if teacher_forcing is True
-        :param teacher_forcing: force target input for the LSTMEncoder
-        :param target: target label for teacher forcing
-        :param predict: if True, _input must be a tensor word vectors
-        :return: LongTensor(LongTensor()) of summary sentences probability vectors
-        """
+    def initialize(self, _input, predict=False):
         sentence_vec = self._sentence_encoder(_input, predict=predict)
         context_aware_sentence_vec = self._lstm_encoder(sentence_vec)
         # Get the first sentence
@@ -122,25 +111,21 @@ class SummaryExtractor(nn.Module):
         next_sent, hidden_states, coverage_g, coverage_p = self._lstm_decoder(None, hidden_states,
                                                                               context_aware_sentence_vec, coverage_g,
                                                                               coverage_p, start_token=True)
-        if teacher_forcing:
-            prob_vector_tensor = torch.empty(len(target), next_sent.size(0))
-            prob_vector_tensor[0] = next_sent
-            for i, label in enumerate(target[:-1]):
-                selected_sent = context_aware_sentence_vec[label]
-                next_sent, hidden_states, coverage_g, coverage_p = self._lstm_decoder(selected_sent, hidden_states,
-                                                                                      context_aware_sentence_vec,
-                                                                                      coverage_g, coverage_p)
-                prob_vector_tensor[i + 1] = next_sent
-        else:
-            prob_vector_tensor = torch.empty(summary_length, next_sent.size(0))
-            prob_vector_tensor[0] = next_sent
-            for i in range(summary_length - 1):
-                selected_sent = context_aware_sentence_vec[torch.argmax(next_sent)]
-                next_sent, hidden_states, coverage_g, coverage_p = self._lstm_decoder(selected_sent, hidden_states,
-                                                                                      context_aware_sentence_vec,
-                                                                                      coverage_g, coverage_p)
-                prob_vector_tensor[i + 1] = next_sent
-        return prob_vector_tensor
+        return context_aware_sentence_vec, next_sent, hidden_states, coverage_g, coverage_p
+
+    def forward(self, selected_sent, hidden_states, context_aware_sentence_vec, coverage_g, coverage_p):
+        """
+        :param selected_sent: context aware sentence representation torch.size(encoder_dim) extracted in prev time-step
+        :param hidden_states: previous time-step hidden states of LSTMDecoder
+        :param context_aware_sentence_vec: outputs of LSTMDecoder
+        :param coverage_g: coverage vector for glimpse network in previous time-step
+        :param coverage_p: coverage vector for pointer network in previous time-step
+        :return: output: extract probability vector of each sentence, hidden_states, coverage_g, coverage_p
+        """
+        output, hidden_states, coverage_g, coverage_p = self._lstm_decoder(selected_sent, hidden_states,
+                                                                           context_aware_sentence_vec,
+                                                                           coverage_g, coverage_p)
+        return output, hidden_states, coverage_g, coverage_p
 
 
 if __name__ == '__main__':
