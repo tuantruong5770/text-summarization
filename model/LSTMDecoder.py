@@ -83,6 +83,8 @@ class LSTMDecoder(nn.Module):
         self.lstm_dim = lstm_dim
         self.num_layer = num_layer
         self.SOE_token = nn.Linear(1, encoder_dim)
+        self.init_hidden1 = nn.Linear(1, lstm_dim * num_layer)
+        self.init_hidden2 = nn.Linear(1, lstm_dim * num_layer)
         self.lstm = nn.LSTM(encoder_dim, lstm_dim, num_layer, dropout=dropout)
         self.glimpse = Glimpse(encoder_dim, lstm_dim, context_size)
         self.pointer = PointerNetwork(encoder_dim, context_size, pointer_size)
@@ -109,9 +111,14 @@ class LSTMDecoder(nn.Module):
         return conditional_p, hidden, coverage_vector_g, coverage_vector_p
 
 
-    def init_hidden(self):
+    def init_hidden_zero(self):
         return (torch.zeros(self.num_layer, 1, self.lstm_dim).to(device),
                 torch.zeros(self.num_layer, 1, self.lstm_dim).to(device))
+
+
+    def init_hidden(self):
+        return (self.init_hidden1(torch.ones(1).to(device)).view(self.num_layer, 1, self.lstm_dim),
+                self.init_hidden2(torch.ones(1).to(device)).view(self.num_layer, 1, self.lstm_dim))
 
 
     @staticmethod
@@ -129,7 +136,7 @@ if __name__ == "__main__":
 
     model = LSTMDecoder(20, 25, 3, 30, 10, 0.0).to(device)
     hj = torch.rand(15, 20).to(device)
-    hidden_states_0 = model.init_hidden()
+    hidden_states_0 = model.init_hidden_zero()
     c_g = model.init_coverage_glimpse(15)
     c_p = model.init_coverage_pointer(15)
 

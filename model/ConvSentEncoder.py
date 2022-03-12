@@ -1,6 +1,6 @@
 from nltk.tokenize import sent_tokenize, word_tokenize
 from gensim.models import Word2Vec
-from word2vec_helper import Word2VecHelper
+from word2vec_helper import Word2VecHelper, PAD
 
 import torch
 import torch.nn as nn
@@ -22,7 +22,7 @@ class SentenceEncoder(nn.Module):
         :param dropout: prob. out zeroing word_vector[i-th]
         """
         super().__init__()
-        self._embedding = nn.Embedding(vocab_size, emb_dim, padding_idx=0)
+        self._embedding = nn.Embedding(vocab_size, emb_dim, padding_idx=PAD)
         self.training = training
         self._dropout = dropout
         self._convs = nn.ModuleList([nn.Conv1d(emb_dim, n_hidden, i) for i in kernel])

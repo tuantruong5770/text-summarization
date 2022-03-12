@@ -13,7 +13,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
 def load_model(model_name, word2v):
-    model = SummaryExtractor(SummaryExtractorHyperParameters(word2v)).to(device)
+    model = SummaryExtractor(SummaryExtractorHyperParameters()).to(device)
     checkpoint = torch.load(f'./pretrained/{model_name}.pt')
     model.load_state_dict(checkpoint)
     return model
@@ -126,6 +126,7 @@ def test_summ_extractor(model, word2v, text, label):
         word2v.build_vocab(text, update=True)
         inp = Word2VecHelper.text_to_vector(text, word2v)
         output = model(inp, summary_length=len(label), predict=True).to(device)
+        print(output)
     return output
 
 
@@ -142,6 +143,8 @@ def compare_reference_label_generated(prob_vector, text, summ, label):
     preds = prob_vector.argmax(dim=1)
     for pred in preds:
         print(' '.join(text[pred]))
+
+
 
 
 

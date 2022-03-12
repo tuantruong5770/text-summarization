@@ -1,12 +1,16 @@
 from gensim.models import Word2Vec
 from data_processing import ProcessedDataset
 from utils import timer
+from collections import defaultdict
 
 import torch
+import torch.nn as nn
 import numpy as np
 
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+PAD = 0
+UNK = 1
 
 
 class Word2VecHelper:
@@ -53,17 +57,46 @@ class Word2VecHelper:
 
 
     @staticmethod
-    def get_weights(model):
+    def get_embedding(word2v, word_to_index):
         """
-        Get weight matrix (type np.ndarray) of Word2Vec. Return as a torch.FloatTensor
-        :param model: trained Word2Vec model
-        :return: FloatTensor([vocab_size, emb_size])
+        Get weight matrix (type np.ndarray) of embeddings. Return as a torch.FloatTensor
+        :param word2v: trained Word2Vec model
+        :param word_to_index: dictionary of word to index
+        :return: FloatTensor([vocab_size, emb_dim])
         """
-        return torch.FloatTensor(model.wv.vectors)
+        vocab_size = len(word_to_index)
+        emb_dim = word2v.vector_size
+        embedding = nn.Embedding(vocab_size, emb_dim).weight
+        with torch.no_grad():
+            for word, index in word_to_index.items():
+                embedding[index, :] = torch.Tensor(word2v[word])
+        return embedding
 
 
     @staticmethod
-    def text_to_id(processed_text, word2v, pad=0):
+    def get_word_to_index(word2v, top_k=0):
+        """
+        From Chen-Bansal codebase
+
+        Get the top k most common word in the dictionary with padding and unknown
+
+        :param word2v: pretrained word2v
+        :param top_k: k most common word
+        :return: defaultdict(str:int) with default of 'unk'
+        """
+        vocab_size = top_k
+        if vocab_size <= 0:
+            vocab_size = len(word2v.wv)
+        word_to_index = dict()
+        word_to_index['<pad>'] = PAD
+        word_to_index['<unk>'] = UNK
+        for i, (word, index) in enumerate(word2v.wv.key_to_index[:vocab_size], 2):
+            word_to_index[word] = i
+        return defaultdict(lambda: UNK, word_to_index)
+
+
+    @staticmethod
+    def text_to_id(processed_text, word_to_index):
         """
         From Chen-Bansal codebase
 
@@ -71,45 +104,32 @@ class Word2VecHelper:
         Use for nn.Embedding indexing purposes
 
         :param processed_text: List(List(str)) of processed text
-        :param word2v: trained Word2Vec model
+        :param word_to_index: dictionary of word to index
         :param pad: padding index
         :return: LongTensor(LongTensor(Long))
         """
-        word_to_index = word2v.wv.key_to_index
         inputs = [[word_to_index[w] for w in sentence] for sentence in processed_text]
         num_sentence = len(inputs)
         max_len = max(len(ids) for ids in inputs)
         tensor = torch.LongTensor(num_sentence, max_len).to(device)
-        tensor.fill_(pad)
+        tensor.fill_(PAD)
         for i, ids in enumerate(inputs):
             tensor[i, :len(ids)] = torch.LongTensor(ids).to(device)
         return tensor
 
 
-    @staticmethod
-    def text_to_vector(processed_text, word2v, pad=0):
-        """
-        Convert processed text into word vectors according to given Word2Vec model
-        Use for predicting / testing purposes
-
-        :param processed_text: List(List(str)) of processed text
-        :param word2v: trained Word2Vec model
-        :return: LongTensor(LongTensor(LongTensor(Long)))
-        """
-        index_to_vector = word2v.wv.vectors
-        id_tensor = Word2VecHelper.text_to_id(processed_text, word2v, pad)
-        return torch.FloatTensor(np.array([[index_to_vector[id] for id in word_ids] for word_ids in id_tensor])).to(device)
-
-
 if __name__ == "__main__":
     # Parameters for init
-    emb_dim = 10
-    n_hidden = 20
-    wd = 10
-    sg = 0
+    kwargs = {
+        'emb_dim': 128,
+        'min_count': 5,
+        'workers': 16,
+        'sg': 1
+        }
 
-    # Example use
-    sentences = Word2VecHelper.process_dataset(ProcessedDataset(dataset='cnn_dailymail'))
-    model = Word2Vec(sentences=sentences, min_count=1, vector_size=emb_dim, window=wd, sg=sg)
-    Word2VecHelper.save_model('cnn_dailymail', model)
-    model = Word2VecHelper.load_model('cnn_dailymail')
+    # Train Word2Vec
+    dataset = ProcessedDataset('cnn_dailymail')
+    sentences = Word2VecHelper.process_dataset(dataset)
+    model = Word2VecHelper.train_model(dataset, **kwargs)
+    Word2VecHelper.save_model('cnn_dailymail_128_min5', model)
+    # model = Word2VecHelper.load_model('cnn_dailymail')

@@ -28,7 +28,7 @@ def test_data_point(model, word2v, dataset, data_index):
 def test_cnn_dailymail_datapoint(data_index):
     dataset = ProcessedDataset('cnn_dailymail')
     word2v = Word2VecHelper.load_model('cnn_dailymail_128')
-    model = load_model('07-03-2022_12-23-57_cnn_dailymail', word2v)
+    model = load_model('10-03-2022_13-47-19_cnn_dailymail', word2v)
     model._sentence_encoder.training = False
     test_data_point(model, word2v, dataset, data_index)
 
@@ -46,11 +46,23 @@ if __name__ == '__main__':
     # print_per = 500
     #
     # train_summ_extractor(model, dataset, num_epochs=num_epochs, batch_size=batch_size, learning_rate=learning_rate,
-    #                      num_training=num_training, teacher_forcing_prob=teacher_forcing_prob, print_per=print_per)
+    #                      num_training=20000, teacher_forcing_prob=teacher_forcing_prob, print_per=print_per)
 
     # dataset = ProcessedDataset('cnn_dailymail')
     # word2v = Word2VecHelper.load_model('cnn_dailymail')
     # model = load_model('05-03-2022_09-00-12_cnn_dailymail', word2v)
     # test_data_point(model, word2v, dataset, 251277)
+    kwargs = {
+        'vector_size': 128,
+        'min_count': 5,
+        'workers': 16,
+        'sg': 1,
 
-    test_cnn_dailymail_datapoint(0)
+    }
+
+    # Train Word2Vec
+    dataset = ProcessedDataset('cnn_dailymail')
+    sentences = Word2VecHelper.process_dataset(dataset)
+    model = Word2VecHelper.train_model(dataset, **kwargs)
+    Word2VecHelper.save_model('cnn_dailymail_128_min5', model)
+    # test_cnn_dailymail_datapoint(124952)
