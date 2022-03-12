@@ -55,7 +55,6 @@ class PointerNetwork(nn.Module):
         self.wc = nn.Linear(1, hidden_size)
         self.v = nn.Linear(hidden_size, 1)
 
-
     def forward(self, encoded_sentences, context_vector, coverage_vector):
         document_size = encoded_sentences.size(0)
         # Copy e_t num_sentence times to make input more efficient
@@ -82,10 +81,11 @@ class LSTMDecoder(nn.Module):
         self.lstm_dim = lstm_dim
         self.num_layer = num_layer
         self.SOE_token = nn.Linear(1, encoder_dim)
+        self.init_hidden1 = nn.Linear(1, lstm_dim*num_layer)
+        self.init_hidden2 = nn.Linear(1, lstm_dim*num_layer)
         self.lstm = nn.LSTM(encoder_dim, lstm_dim, num_layer, dropout=dropout)
         self.glimpse = Glimpse(encoder_dim, lstm_dim, context_size)
         self.pointer = PointerNetwork(encoder_dim, context_size, pointer_size)
-
 
     def forward(self, _input, hidden_states, encoded_sentences, coverage_vector_g, coverage_vector_p,
                 start_token=False):
@@ -107,9 +107,13 @@ class LSTMDecoder(nn.Module):
         conditional_p, coverage_vector_p = self.pointer(encoded_sentences, context_vector, coverage_vector_p)
         return conditional_p, hidden, coverage_vector_g, coverage_vector_p
 
-    def init_hidden(self):
+    def init_hidden_zeros(self):
         return (torch.zeros(self.num_layer, 1, self.lstm_dim).to(device),
                 torch.zeros(self.num_layer, 1, self.lstm_dim).to(device))
+
+    def init_hidden(self):
+        return (self.init_hidden1(torch.ones(1).to(device)).view(self.num_layer, 1, self.lstm_dim),
+                self.init_hidden2(torch.ones(1).to(device)).view(self.num_layer, 1, self.lstm_dim))
 
     @staticmethod
     def init_coverage_pointer(document_length):
@@ -118,12 +122,6 @@ class LSTMDecoder(nn.Module):
     @staticmethod
     def init_coverage_glimpse(document_length):
         return torch.zeros(document_length, 1).to(device)
-
-    def init_coverage_pointer(self, document_length):
-        return self.pointer.init_coverage(document_length)
-
-    def init_coverage_glimpse(self, document_length):
-        return self.glimpse.init_coverage(document_length)
 
 
 if __name__ == "__main__":
