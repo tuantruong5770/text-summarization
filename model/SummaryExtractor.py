@@ -46,7 +46,7 @@ class SummaryExtractorHyperParameters:
 
 
 class SummaryExtractor(nn.Module):
-    def __init__(self, parameters: SummaryExtractorHyperParameters, word_embedding):
+    def __init__(self, parameters: SummaryExtractorHyperParameters):
         """
         Combine all the sub-models to create a full summary extraction model.
         Input list of word ids vectors -> output tensor of sentence extraction probability vectors.
@@ -59,7 +59,6 @@ class SummaryExtractor(nn.Module):
         Size of output tensor will be the same as number of sentences in the summary.
 
         :param parameters: SentenceExtractionHyperParameters object for parameters filling
-        :param word_embedding: word embeddings for the model
         """
         super().__init__()
         self.hyper_params = parameters
@@ -69,7 +68,6 @@ class SummaryExtractor(nn.Module):
                                                  kernel=parameters.conv_sent_encoder_kernel,
                                                  dropout=parameters.conv_sent_encoder_dropout,
                                                  training=parameters.conv_sent_encoder_training)
-        self._sentence_encoder.set_embedding(word_embedding)
 
         self._lstm_encoder = LSTMEncoder(input_dim=parameters.conv_sent_encoder_output_dim,
                                          n_hidden=parameters.lstm_encoder_n_hidden,
