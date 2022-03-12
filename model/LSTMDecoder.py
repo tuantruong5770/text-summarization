@@ -125,7 +125,6 @@ class LSTMDecoder(nn.Module):
     def init_coverage_pointer(document_length):
         return torch.zeros(document_length, 1).to(device)
 
-
     @staticmethod
     def init_coverage_glimpse(document_length):
         return torch.zeros(document_length, 1).to(device)
