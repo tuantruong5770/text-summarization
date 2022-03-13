@@ -1,6 +1,8 @@
 # text-summarization
 An implementation of text summarization model based on a model proposed by Yen-Chun Chen and Mohit Bansal. 
 
+UCI CS-175 Project
+
 The project is inspired by Fast Abstractive Summarization with Reinforce-Selected Sentence Rewriting
 
 Original authors: Yen-Chun Chen and Mohit Bansal
