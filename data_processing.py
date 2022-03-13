@@ -100,7 +100,7 @@ class ProcessedDataset:
 
 
     def __init__(self, dataset='cnn_dailymail', data_dir='./data', processed_data_dir='./data/processed',
-                 split='train'):
+                 raw_data_dir='./data/raw', split='train', load_processed=True, load_raw=False):
         """
         Load the dataset and save into self.dataset
 
@@ -132,27 +132,38 @@ class ProcessedDataset:
 
         self._data_dir = data_dir
         self._process_data_dir = processed_data_dir
+        self._raw_data_dir = raw_data_dir
 
         self._file_dir = f'{self._process_data_dir}/{self._name}_{self._split}.json'
+        self._raw_dir = f'{self._raw_data_dir}/{self._name}_{self._split}.json'
 
         self._text_key = ProcessedDataset.key_map[self._name][0]
         self._summ_key = ProcessedDataset.key_map[self._name][1]
 
-        # self.dataset is initialized in self._load_data()
-        self._load_data()
+        self.dataset = None
+        self.raw_dataset = None
+        # self.dataset and self.raw_dataset is initialized in self._load_data()
+        self._load_data(load_processed, load_raw)
 
 
-    def _load_data(self):
+    def _load_data(self, load_processed, load_raw):
         print(f'Loading {self._name} dataset...')
         try:
-            with open(self._file_dir) as f:
-                print(f'Found preprocessed {self._name} {self._split} dataset with specified options. Loading...')
-                self.dataset = json.load(f)
-                print(f'{self._file_dir} dataset loaded successfully. Dataset containing {len(self.dataset)} entries.')
+            if load_processed:
+                with open(self._file_dir) as f:
+                    print(f'Found preprocessed {self._name} {self._split} dataset with specified options. Loading...')
+                    self.dataset = json.load(f)
+                    print(f'{self._file_dir} dataset loaded successfully. Dataset containing {len(self.dataset)} entries.')
+            if load_raw:
+                with open(self._raw_dir) as f:
+                    print(f'Found raw {self._name} {self._split} dataset with specified options. Loading...')
+                    self.raw_dataset = json.load(f)
+                    print(f'{self._raw_dir} dataset loaded successfully. Dataset containing {len(self.raw_dataset)} entries.')
         except FileNotFoundError:
             print(f'Processing dataset and saving at "{self._file_dir}" ...')
-            self.dataset = self._process_data()
+            self.dataset, self.raw_dataset = self._process_data()
             print(f'{self._file_dir} dataset loaded successfully. Dataset containing {len(self.dataset)} entries.')
+            print(f'{self._raw_dir} dataset loaded successfully. Dataset containing {len(self.raw_dataset)} entries.')
 
 
     @timer
@@ -160,6 +171,7 @@ class ProcessedDataset:
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         dataset = tfds.load(self._name, data_dir=self._data_dir, split=self._split)
         processed_data = []
+        raw_data = []
         rouge_calc = RougeL(device=device)
         for i, data in enumerate(dataset):
             # Convert from tensor string to python string
@@ -192,13 +204,16 @@ class ProcessedDataset:
             processed_data.append(
                 {self._text_key: text_sent, self._summ_key: summ_sent, 'label': label, 'score': score})
 
-            if (i + 1) % 20000 == 0:
-                print(i)
+            raw_data.append(
+                {self._text_key: text, self._summ_key: summ, 'label': label, 'score': score})
 
         with open(self._file_dir, 'w') as outfile:
             json.dump(processed_data, outfile)
 
-        return processed_data
+        with open(self._raw_dir, 'w') as outfile:
+            json.dump(raw_data, outfile)
+
+        return processed_data, raw_data
 
 
     def _generate_label_and_score(self, processed_text_sent, processed_summ_sent, index_mapping, rouge_calc):
@@ -230,16 +245,32 @@ class ProcessedDataset:
         return self.dataset
 
 
+    def get_raw_dataset(self):
+        return self.raw_dataset
+
+
     def get_entry(self, i):
         return self.dataset[i]
+
+
+    def get_raw_entry(self, i):
+        return self.raw_dataset[i]
 
 
     def get_text(self, i):
         return self.dataset[i][self._text_key]
 
 
+    def get_raw_text(self, i):
+        return self.raw_dataset[i][self._text_key]
+
+
     def get_summary(self, i):
         return self.dataset[i][self._summ_key]
+
+
+    def get_raw_summary(self, i):
+        return self.raw_dataset[i][self._summ_key]
 
 
     def get_label(self, i):
@@ -268,5 +299,8 @@ class ProcessedDataset:
 
 if __name__ == '__main__':
     # Process and save the 2 data into default directory './data'
-    cnn = ProcessedDataset(dataset='cnn_dailymail')
-    bill = ProcessedDataset(dataset='billsum')
+    cnn = ProcessedDataset('cnn_dailymail', split='test')
+    # bill = ProcessedDataset(dataset='billsum')
+
+
+

@@ -12,8 +12,8 @@ import time
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
-def load_model(model_name, word2v):
-    model = SummaryExtractor(SummaryExtractorHyperParameters(word2v)).to(device)
+def load_model(model_name):
+    model = SummaryExtractor().to(device)
     checkpoint = torch.load(f'./pretrained/{model_name}.pt')
     model.load_state_dict(checkpoint)
     return model
@@ -121,27 +121,7 @@ def train_summ_extractor(model, dataset, num_epochs, batch_size, learning_rate, 
         f.writelines(lines)
 
 
-def test_summ_extractor(model, word2v, text, label):
-    with torch.no_grad():
-        word2v.build_vocab(text, update=True)
-        inp = Word2VecHelper.text_to_vector(text, word2v)
-        output = model(inp, summary_length=len(label), predict=True).to(device)
-    return output
 
-
-def compare_reference_label_generated(prob_vector, text, summ, label):
-    print("~*~*~*~*~*~*~*~*~*~*~*~*~ GROUND TRUTH ~*~*~*~*~*~*~*~*~*~*~*~*~")
-    for sent in summ:
-        print(' '.join(sent))
-
-    print("*~*~*~*~*~*~*~*~*~*~*~*~ LABELED SUMMARY ~*~*~*~*~*~*~*~*~*~*~*~")
-    for label_index in label:
-        print(' '.join(text[label_index]))
-
-    print("~*~*~*~*~*~*~*~*~*~*~*~ GENERATED SUMMARY ~*~*~*~*~*~*~*~*~*~*~*")
-    preds = prob_vector.argmax(dim=1)
-    for pred in preds:
-        print(' '.join(text[pred]))
 
 
 
