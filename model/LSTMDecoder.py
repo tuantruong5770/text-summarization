@@ -56,7 +56,6 @@ class PointerNetwork(nn.Module):
         self.wc = nn.Linear(1, hidden_size)
         self.v = nn.Linear(hidden_size, 1)
 
-
     def forward(self, encoded_sentences, context_vector, coverage_vector):
         document_size = encoded_sentences.size(0)
         # Copy e_t num_sentence times to make input more efficient
@@ -88,7 +87,6 @@ class LSTMDecoder(nn.Module):
         self.lstm = nn.LSTM(encoder_dim, lstm_dim, num_layer, dropout=dropout)
         self.glimpse = Glimpse(encoder_dim, lstm_dim, context_size)
         self.pointer = PointerNetwork(encoder_dim, context_size, pointer_size)
-
 
     def forward(self, _input, hidden_states, encoded_sentences, coverage_vector_g, coverage_vector_p,
                 start_token=False):
