@@ -1,18 +1,17 @@
 from word2vec_helper import Word2VecHelper
 import torch
-import torch.nn as nn
 from datetime import datetime
 
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
-class ExtractorWrapper:
+class ExtractorNoCoverageWrapper:
     def __init__(self, model, word_to_index):
         """
-        Wrapper of SummaryExtractor with some additional functionality
+        Wrapper of SummaryExtractorNoCoverage with some additional functionality
 
-        :param model: SummaryExtractor model
+        :param model: SummaryExtractorNoCoverage model
         :param word_to_index: word to index dictionary
         """
         self.model = model
@@ -32,25 +31,21 @@ class ExtractorWrapper:
         """
         # Convert text to id tensor
         _input = Word2VecHelper.text_to_id(_input, self.word_to_index)
-        context_aware_sentence_vec, output, hidden_states, coverage_g, coverage_p = self.model.initialize(_input)
+        context_aware_sentence_vec, output, hidden_states = self.model.initialize(_input)
 
         if teacher_forcing:
             prob_vector_tensor = torch.empty(len(target), output.size(0)).to(device)
             prob_vector_tensor[0] = output
             for i, label in enumerate(target[:-1]):
                 selected_sent = context_aware_sentence_vec[label]
-                output, hidden_states, coverage_g, coverage_p = self.model(selected_sent, hidden_states,
-                                                                           context_aware_sentence_vec,
-                                                                           coverage_g, coverage_p)
+                output, hidden_states = self.model(selected_sent, hidden_states, context_aware_sentence_vec)
                 prob_vector_tensor[i + 1] = output
         else:
             prob_vector_tensor = torch.empty(summary_length, output.size(0)).to(device)
             prob_vector_tensor[0] = output
             for i in range(summary_length - 1):
                 selected_sent = context_aware_sentence_vec[torch.argmax(output)]
-                output, hidden_states, coverage_g, coverage_p = self.model(selected_sent, hidden_states,
-                                                                           context_aware_sentence_vec,
-                                                                           coverage_g, coverage_p)
+                output, hidden_states = self.model(selected_sent, hidden_states, context_aware_sentence_vec)
                 prob_vector_tensor[i + 1] = output
         return prob_vector_tensor
 
@@ -71,7 +66,7 @@ class ExtractorWrapper:
         with torch.no_grad():
             # Convert text to id tensor
             _input = Word2VecHelper.text_to_id(_input, self.word_to_index)
-            context_aware_sentence_vec, output, hidden_states, coverage_g, coverage_p = self.model.initialize(_input)
+            context_aware_sentence_vec, output, hidden_states = self.model.initialize(_input)
 
             sentence_index = list(range(context_aware_sentence_vec.size(0)))
             prob_vector_tensor = torch.empty(summary_length, output.size(0)).to(device)
@@ -91,9 +86,7 @@ class ExtractorWrapper:
             selected_sent = context_aware_sentence_vec[index]
 
             for i in range(summary_length - 1):
-                output, hidden_states, coverage_g, coverage_p = self.model(selected_sent, hidden_states,
-                                                                           context_aware_sentence_vec, coverage_g,
-                                                                           coverage_p)
+                output, hidden_states = self.model(selected_sent, hidden_states, context_aware_sentence_vec)
                 index = get_index(output)
                 selected_sent = context_aware_sentence_vec[index]
                 prob_vector_tensor[i + 1] = output
@@ -220,7 +213,7 @@ class ExtractorWrapper:
             parameters = model.hyper_params
             lines = [
                 f'MODEL NAME: {save_name}\n',
-                f'MODEL TYPE: SummaryExtractor\n',
+                f'MODEL TYPE: SummaryExtractorNoCoverage\n',
                 f'TRAIN TYPE: {train_type}\n',
                 f'\n',
                 f'MODEL PARAMETERS:\n',
