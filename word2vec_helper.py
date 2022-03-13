@@ -66,10 +66,12 @@ class Word2VecHelper:
         """
         vocab_size = len(word_to_index)
         emb_dim = word2v.vector_size
+        word_to_vec = word2v.wv
         embedding = nn.Embedding(vocab_size, emb_dim).weight
         with torch.no_grad():
             for word, index in word_to_index.items():
-                embedding[index, :] = torch.Tensor(word2v[word])
+                if index != PAD and index != UNK:
+                    embedding[index] = torch.Tensor(word_to_vec[word])
         return embedding
 
 
@@ -90,7 +92,7 @@ class Word2VecHelper:
         word_to_index = dict()
         word_to_index['<pad>'] = PAD
         word_to_index['<unk>'] = UNK
-        for i, (word, index) in enumerate(word2v.wv.key_to_index[:vocab_size], 2):
+        for i, word in enumerate(word2v.wv.index_to_key[:vocab_size], 2):
             word_to_index[word] = i
         return defaultdict(lambda: UNK, word_to_index)
 
@@ -121,7 +123,7 @@ class Word2VecHelper:
 if __name__ == "__main__":
     # Parameters for init
     kwargs = {
-        'emb_dim': 128,
+        'vector_size': 128,
         'min_count': 5,
         'workers': 16,
         'sg': 1

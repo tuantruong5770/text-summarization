@@ -46,6 +46,7 @@ if __name__ == '__main__':
     # trainer = Trainer(model_wrapper, dataset)
     # trainer.train_epoch()
     #
+
     # kwargs = {
     #     'vector_size': 128,
     #     'min_count': 5,
@@ -79,7 +80,7 @@ if __name__ == '__main__':
 
     # test_cnn_dailymail_datapoint(0)
 
-    model_name = '12-03-2022_09-04-17_cnn_dailymail'
+    model_name = '12-03-2022_01-37-33_cnn_dailymail'
     word2v_model_name = 'cnn_dailymail_128_min5'
     dataset = ProcessedDataset('cnn_dailymail', split='test', load_raw=True)
     word2v = Word2VecHelper.load_model(word2v_model_name)

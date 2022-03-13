@@ -26,7 +26,7 @@ class SummaryExtractorHyperParameters:
         """
         self.word_embedding_dim = word_embedding_dim
 
-        self.conv_sent_encoder_vocab_size = conv_sent_encoder_vocab_size
+        self.conv_sent_encoder_vocab_size = conv_sent_encoder_vocab_size + 2    # +2 for pad index and unknown index
         self.conv_sent_encoder_n_hidden = conv_sent_encoder_n_hidden
         self.conv_sent_encoder_output_dim = conv_sent_encoder_n_hidden * len(conv_sent_encoder_kernel)
         self.conv_sent_encoder_kernel = conv_sent_encoder_kernel
@@ -46,7 +46,7 @@ class SummaryExtractorHyperParameters:
 
 
 class SummaryExtractor(nn.Module):
-    def __init__(self, parameters: SummaryExtractorHyperParameters):
+    def __init__(self):
         """
         Combine all the sub-models to create a full summary extraction model.
         Input list of word ids vectors -> output tensor of sentence extraction probability vectors.
@@ -57,70 +57,58 @@ class SummaryExtractor(nn.Module):
         Output is a tensor of probability vectors, where each vector has size num_sentence.
         Each vector is a probability distribution of each sentence being the sentence chosen for summary.
         Size of output tensor will be the same as number of sentences in the summary.
-
-        :param parameters: SentenceExtractionHyperParameters object for parameters filling
         """
         super().__init__()
-        self.hyper_params = parameters
-        self._sentence_encoder = SentenceEncoder(vocab_size=parameters.conv_sent_encoder_vocab_size,
-                                                 emb_dim=parameters.word_embedding_dim,
-                                                 n_hidden=parameters.conv_sent_encoder_n_hidden,
-                                                 kernel=parameters.conv_sent_encoder_kernel,
-                                                 dropout=parameters.conv_sent_encoder_dropout,
-                                                 training=parameters.conv_sent_encoder_training)
+        self.hyper_params = SummaryExtractorHyperParameters()
 
-        self._lstm_encoder = LSTMEncoder(input_dim=parameters.conv_sent_encoder_output_dim,
-                                         n_hidden=parameters.lstm_encoder_n_hidden,
-                                         n_layer=parameters.lstm_encoder_n_layer,
-                                         dropout=parameters.lstm_encoder_dropout)
+        self._sentence_encoder = SentenceEncoder(vocab_size=self.hyper_params.conv_sent_encoder_vocab_size,
+                                                 emb_dim=self.hyper_params.word_embedding_dim,
+                                                 n_hidden=self.hyper_params.conv_sent_encoder_n_hidden,
+                                                 kernel=self.hyper_params.conv_sent_encoder_kernel,
+                                                 dropout=self.hyper_params.conv_sent_encoder_dropout,
+                                                 training=self.hyper_params.conv_sent_encoder_training)
 
-        self._lstm_decoder = LSTMDecoder(encoder_dim=parameters.lstm_encoder_output_dim,
-                                         lstm_dim=parameters.lstm_decoder_n_hidden,
-                                         num_layer=parameters.lstm_decoder_n_layer,
-                                         context_size=parameters.lstm_decoder_context_vec_size,
-                                         pointer_size=parameters.lstm_decoder_pointer_net_n_hidden,
-                                         dropout=parameters.lstm_decoder_dropout)
+        self._lstm_encoder = LSTMEncoder(input_dim=self.hyper_params.conv_sent_encoder_output_dim,
+                                         n_hidden=self.hyper_params.lstm_encoder_n_hidden,
+                                         n_layer=self.hyper_params.lstm_encoder_n_layer,
+                                         dropout=self.hyper_params.lstm_encoder_dropout)
+
+        self._lstm_decoder = LSTMDecoder(encoder_dim=self.hyper_params.lstm_encoder_output_dim,
+                                         lstm_dim=self.hyper_params.lstm_decoder_n_hidden,
+                                         num_layer=self.hyper_params.lstm_decoder_n_layer,
+                                         context_size=self.hyper_params.lstm_decoder_context_vec_size,
+                                         pointer_size=self.hyper_params.lstm_decoder_pointer_net_n_hidden,
+                                         dropout=self.hyper_params.lstm_decoder_dropout)
 
 
-    def forward(self, _input, summary_length=5, teacher_forcing=False, target=(), predict=False):
-        """
-        Output LongTensor(LongTensor()) of summary sentences probability vectors
-
-        :param _input: IntTensor(IntTensor()) of torch.Size([num_sent, max_sent_len])
-        :param summary_length: number of summary sentences to extract, len(target) if teacher_forcing is True
-        :param teacher_forcing: force target input for the LSTMEncoder
-        :param target: target label for teacher forcing
-        :param predict: if True, _input must be a tensor word vectors
-        :return: LongTensor(LongTensor()) of summary sentences probability vectors
-        """
-        sentence_vec = self._sentence_encoder(_input, predict=predict)
+    def initialize(self, _input):
+        sentence_vec = self._sentence_encoder(_input)
         context_aware_sentence_vec = self._lstm_encoder(sentence_vec)
         # Get the first sentence
-        hidden_states = self._lstm_decoder.init_hidden_zero()
+        hidden_states = self._lstm_decoder.init_hidden()
         coverage_g = self._lstm_decoder.init_coverage_glimpse(len(context_aware_sentence_vec))
         coverage_p = self._lstm_decoder.init_coverage_pointer(len(context_aware_sentence_vec))
-        next_sent, hidden_states, coverage_g, coverage_p = self._lstm_decoder(None, hidden_states,
-                                                                              context_aware_sentence_vec, coverage_g,
-                                                                              coverage_p, start_token=True)
-        if teacher_forcing:
-            prob_vector_tensor = torch.empty(len(target), next_sent.size(0))
-            prob_vector_tensor[0] = next_sent
-            for i, label in enumerate(target[:-1]):
-                selected_sent = context_aware_sentence_vec[label]
-                next_sent, hidden_states, coverage_g, coverage_p = self._lstm_decoder(selected_sent, hidden_states,
-                                                                                      context_aware_sentence_vec,
-                                                                                      coverage_g, coverage_p)
-                prob_vector_tensor[i + 1] = next_sent
-        else:
-            prob_vector_tensor = torch.empty(summary_length, next_sent.size(0))
-            prob_vector_tensor[0] = next_sent
-            for i in range(summary_length - 1):
-                selected_sent = context_aware_sentence_vec[torch.argmax(next_sent)]
-                next_sent, hidden_states, coverage_g, coverage_p = self._lstm_decoder(selected_sent, hidden_states,
-                                                                                      context_aware_sentence_vec,
-                                                                                      coverage_g, coverage_p)
-                prob_vector_tensor[i + 1] = next_sent
-        return prob_vector_tensor
+        output, hidden_states, coverage_g, coverage_p = self._lstm_decoder(None, hidden_states,
+                                                                           context_aware_sentence_vec, coverage_g,
+                                                                           coverage_p, start_token=True)
+        return context_aware_sentence_vec, output, hidden_states, coverage_g, coverage_p
+
+
+    def forward(self, selected_sent, hidden_states, context_aware_sentence_vec, coverage_g, coverage_p):
+        """
+        Output probability vector of the next selected sentence
+
+        :param selected_sent: context aware sentence representation torch.size(encoder_dim) extracted in prev time-step
+        :param hidden_states: previous time-step hidden states of LSTMDecoder
+        :param context_aware_sentence_vec: outputs of LSTMDecoder
+        :param coverage_g: coverage vector for glimpse network in previous time-step
+        :param coverage_p: coverage vector for pointer network in previous time-step
+        :return: output: extract probability vector of each sentence, hidden_states, coverage_g, coverage_p
+        """
+        output, hidden_states, coverage_g, coverage_p = self._lstm_decoder(selected_sent, hidden_states,
+                                                                           context_aware_sentence_vec,
+                                                                           coverage_g, coverage_p)
+        return output, hidden_states, coverage_g, coverage_p
 
 
     def set_embedding(self, word_embedding):
