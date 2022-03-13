@@ -1,18 +1,17 @@
 from word2vec_helper import Word2VecHelper
 import torch
-import torch.nn as nn
 from datetime import datetime
 
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
-class ExtractorWrapper:
+class FFExtractorWrapper:
     def __init__(self, model, word_to_index):
         """
-        Wrapper of SummaryExtractor with some additional functionality
+        Wrapper of FFSummaryExtractor with some additional functionality
 
-        :param model: SummaryExtractor model
+        :param model: FFSummaryExtractor model
         :param word_to_index: word to index dictionary
         """
         self.model = model
@@ -20,42 +19,20 @@ class ExtractorWrapper:
         self.hyper_params = model.hyper_params
 
 
-    def forward(self, _input, summary_length=5, teacher_forcing=False, target=()):
+    def forward(self, _input):
         """
-        Output LongTensor(LongTensor()) of summary sentences probability vectors
+        Output LongTensor() of summary sentences probability vectors
 
         :param _input: processed text input
-        :param summary_length: number of summary sentences to extract, len(target) if teacher_forcing is True
-        :param teacher_forcing: force target input for the LSTMEncoder
-        :param target: target label for teacher forcing
         :return: LongTensor(LongTensor()) of summary sentences probability vectors
         """
         # Convert text to id tensor
         _input = Word2VecHelper.text_to_id(_input, self.word_to_index)
-        context_aware_sentence_vec, output, hidden_states, coverage_g, coverage_p = self.model.initialize(_input)
-
-        if teacher_forcing:
-            prob_vector_tensor = torch.empty(len(target), output.size(0)).to(device)
-            prob_vector_tensor[0] = output
-            for i, label in enumerate(target[:-1]):
-                selected_sent = context_aware_sentence_vec[label]
-                output, hidden_states, coverage_g, coverage_p = self.model(selected_sent, hidden_states,
-                                                                           context_aware_sentence_vec,
-                                                                           coverage_g, coverage_p)
-                prob_vector_tensor[i + 1] = output
-        else:
-            prob_vector_tensor = torch.empty(summary_length, output.size(0)).to(device)
-            prob_vector_tensor[0] = output
-            for i in range(summary_length - 1):
-                selected_sent = context_aware_sentence_vec[torch.argmax(output)]
-                output, hidden_states, coverage_g, coverage_p = self.model(selected_sent, hidden_states,
-                                                                           context_aware_sentence_vec,
-                                                                           coverage_g, coverage_p)
-                prob_vector_tensor[i + 1] = output
-        return prob_vector_tensor
+        prob_vector = self.model(_input)
+        return prob_vector
 
 
-    def predict(self, _input, summary_length=5, no_duplicate=False):
+    def predict(self, _input, summary_length=5):
         """
         Wrapper Required
         Signature must be [predict(_input, summary_length, **kwargs) -> tensor, extracted_index]
@@ -63,43 +40,16 @@ class ExtractorWrapper:
         Return extraction probability vectors with extracted index
 
         :param _input: document text
-        :param summary_length: number of sentences to extract (must be less than number of sentences in text(
-        :param no_duplicate: if True then the model pick the second most probable sentence if the most probable sentence
-        has been chosen
+        :param summary_length: number of sentences to extract (must be less than number of sentences in text)
         :return: prob_vector_tensor, extracted indices
         """
         with torch.no_grad():
             # Convert text to id tensor
+            document_size = len(_input)
             _input = Word2VecHelper.text_to_id(_input, self.word_to_index)
-            context_aware_sentence_vec, output, hidden_states, coverage_g, coverage_p = self.model.initialize(_input)
-
-            sentence_index = list(range(context_aware_sentence_vec.size(0)))
-            prob_vector_tensor = torch.empty(summary_length, output.size(0)).to(device)
-            prob_vector_tensor[0] = output
-
-            # Get index based on no_duplicate flag
-            def get_index(prob_vec):
-                if no_duplicate:
-                    max_index = max(sentence_index, key=lambda s: prob_vec[s])
-                    sentence_index.remove(max_index)
-                else:
-                    max_index = torch.argmax(prob_vec)
-                return max_index
-
-            index = get_index(output)
-            extracted_index = [index]
-            selected_sent = context_aware_sentence_vec[index]
-
-            for i in range(summary_length - 1):
-                output, hidden_states, coverage_g, coverage_p = self.model(selected_sent, hidden_states,
-                                                                           context_aware_sentence_vec, coverage_g,
-                                                                           coverage_p)
-                index = get_index(output)
-                selected_sent = context_aware_sentence_vec[index]
-                prob_vector_tensor[i + 1] = output
-                extracted_index.append(index)
-
-        return prob_vector_tensor, extracted_index
+            prob_vector = self.model(_input)
+            extracted_index = torch.argsort(prob_vector[:document_size], dim=0)[:summary_length]
+        return prob_vector, extracted_index
 
 
     def calculate_loss(self, criterion, output, label):
@@ -116,8 +66,9 @@ class ExtractorWrapper:
         """
         # Creating label tensor
         labels = torch.zeros(output.size()).to(device)
-        for j, label_index in enumerate(label):
-            labels[j, label_index] = 1
+        normalized_prob = 1 / len(label)
+        for label_index in label:
+            labels[label_index] = normalized_prob
         loss = criterion(output, labels)
         return loss
 
@@ -140,7 +91,7 @@ class ExtractorWrapper:
             tot_loss = 0
             for index in val_loader:
                 text, summ, label, score = val_set[index[0]]
-                output = self.forward(text, summary_length=len(label))
+                output = self.forward(text)
                 tot_loss += self.calculate_loss(criterion, output, label)
         val_loss = tot_loss / num_data
         return val_loss
@@ -148,7 +99,7 @@ class ExtractorWrapper:
 
     def comprehensive_test(self, text, summ, label, data_index, print_text=False, outfile=None):
         """
-        Comprehensive test of the model with prediction with and without force no dup
+        Comprehensive test of the model with prediction
         Output either print or to output file if specified
 
         :param text: Input text
@@ -159,8 +110,7 @@ class ExtractorWrapper:
         :param outfile: (optional) output txt file
         :return:
         """
-        prob_vector, ext_ind = self.predict(text, len(label), no_duplicate=False)
-        prob_vector_no_dup, ext_ind_no_dup = self.predict(text, len(label), no_duplicate=True)
+        prob_vector, ext_ind = self.predict(text, len(label))
 
         lines = [f'DATA INDEX: {data_index}\n']
 
@@ -179,10 +129,6 @@ class ExtractorWrapper:
 
         lines.append('~*~*~*~*~*~*~*~*~*~*~*~ GENERATED SUMMARY ~*~*~*~*~*~*~*~*~*~*~*\n')
         for ind in ext_ind:
-            lines.append(' '.join(text[ind]) + '\n')
-
-        lines.append('~*~*~*~*~*~*~*~*~* GENERATED SUMMARY (NO DUP) ~*~*~*~*~*~*~*~*~*\n')
-        for ind in ext_ind_no_dup:
             lines.append(' '.join(text[ind]) + '\n')
 
         if outfile:
@@ -220,7 +166,7 @@ class ExtractorWrapper:
             parameters = model.hyper_params
             lines = [
                 f'MODEL NAME: {save_name}\n',
-                f'MODEL TYPE: SummaryExtractor\n',
+                f'MODEL TYPE: FFSummaryExtractor\n',
                 f'TRAIN TYPE: {train_type}\n',
                 f'\n',
                 f'MODEL PARAMETERS:\n',
@@ -238,11 +184,7 @@ class ExtractorWrapper:
                 f'lstm_encoder_output_dim = {parameters.lstm_encoder_output_dim}\n',
                 f'lstm_encoder_dropout = {parameters.lstm_encoder_dropout}\n',
                 f'\n',
-                f'lstm_decoder_n_hidden = {parameters.lstm_decoder_n_hidden}\n',
-                f'lstm_decoder_n_layer = {parameters.lstm_decoder_n_layer}\n',
-                f'lstm_decoder_context_vec_size = {parameters.lstm_decoder_context_vec_size}\n',
-                f'lstm_decoder_pointer_net_n_hidden = {parameters.lstm_decoder_pointer_net_n_hidden}\n',
-                f'lstm_decoder_dropout = {parameters.lstm_decoder_dropout}\n',
+                f'ff_network_hidden_dim = {parameters.ff_network_hidden_dim}\n',
                 f'\n',
                 f'TRAINING PARAMETERS:\n',
                 f'\n',
@@ -256,8 +198,8 @@ class ExtractorWrapper:
             f.writelines(lines)
 
 
-    def __call__(self, _input, summary_length=5, teacher_forcing=False, target=()):
-        return self.forward(_input, summary_length, teacher_forcing, target)
+    def __call__(self, _input):
+        return self.forward(_input)
 
 
 if __name__ == '__main__':

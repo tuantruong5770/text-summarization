@@ -127,8 +127,6 @@ class ProcessedDataset:
             print(f'Dataset {dataset} is not supported. Defaulted to "cnn_dailymail" dataset')
 
         self._split = split
-        if split not in ['train', 'test', 'validation']:
-            self._split = 'train'
 
         self._data_dir = data_dir
         self._process_data_dir = processed_data_dir

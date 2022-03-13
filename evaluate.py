@@ -8,9 +8,11 @@ import subprocess as sp
 
 try:
     ROUGE_PATH = os.environ['ROUGE']
+    TMP_DIR_PREF = os.environ['TMP_DIR_PREF']
 except KeyError:
-    print('Warning: ROUGE is not configured')
+    print('Warning: paths are not configured')
     ROUGE_PATH = None
+    TMP_DIR_PREF = None
 
 
 class EvaluateModel:
@@ -22,35 +24,54 @@ class EvaluateModel:
         self.model_name = model_name
 
 
-    def evaluate(self):
+    def generate_evaluate_command(self):
         """
+        pyrouge install issue fix https://github.com/binhna/instruction/issues/4
         Evaluate the model with "official" ROUGE script. The args include:
             [-c 95]: 95% confidence interval
             [-r 1000]: 1000 sampling point in bootstrap resampling
             [-n 2]: max n-gram (ROUGE-2)
             [-m]: Stem both reference and generated using Porter stemmer before computing scores
-        :return: computed scores
+        :return: command to run in terminal (Windows 10)
         """
         assert os.path.isdir(f'evaluate/{self.model_name}/')
+        assert ROUGE_PATH is not None
+        assert TMP_DIR_PREF is not None
 
-        r = Rouge155(rouge_dir=ROUGE_PATH)
-        r.system_dir = f'evaluate/{self.model_name}/generated/'
-        r.model_dir = f'evaluate/{self.model_name}/reference/'
+        directory = f'evaluate/{self.model_name}/'
+        # create a temp folder at prefix, remember to delete after running cmd
+        tmp_dir = tempfile.TemporaryDirectory(prefix='D:/temp/').name
 
-        r.system_filename_pattern = r'(\d+)_generated.txt'
-        r.model_filename_pattern = '#ID#_reference.txt'
+        gen_dir = directory + 'generated/'
+        ref_dir = directory + 'reference/'
+        gen_pattern = r'(\d+)_generated.txt'
+        ref_pattern = '#ID#_reference.txt'
+        system_id = 1
+        cmd = '-c 95 -r 1000 -n 2 -m'
 
-        # "Official" ROUGE script
-        output = r.convert_and_evaluate(rouge_args='-c 95 -r 1000 -n 2 -m')
-        print(output)
-        return r.output_to_dict(output)
+        Rouge155.convert_summaries_to_rouge_format(
+            gen_dir, os.path.join(tmp_dir, 'generated'))
+        Rouge155.convert_summaries_to_rouge_format(
+            ref_dir, os.path.join(tmp_dir, 'reference'))
+        Rouge155.write_config_static(
+            os.path.join(tmp_dir, 'generated'), gen_pattern,
+            os.path.join(tmp_dir, 'reference'), ref_pattern,
+            os.path.join(tmp_dir, 'settings.xml'), system_id
+        )
+        cmd = 'perl ' + (os.path.join(ROUGE_PATH, 'ROUGE-1.5.5.pl') + ' -e {} '.format(
+            os.path.join(ROUGE_PATH, 'data')) + cmd + ' -a {}'.format(os.path.join(tmp_dir, 'settings.xml')))
+
+        with open(directory + f'{self.model_name}_eval_cmd.txt', 'w') as txt:
+            txt.write(cmd)
+
+        return cmd
 
 
 def generate_evaluation_data(model_wrapper, model_name, dataset_test):
     """
     Generate the data to use for evaluation
 
-    :param model_wrapper: model wrapper with method [predict()-(>prob_vector_tensor, extracted_index)] signature
+    :param model_wrapper: model wrapper with method predict(text, summary_length)-(>prob_vector_tensor, extracted_index)
     :param model_name: name of model
     :param dataset_test: test data set for input
     :return: does not return, generate files instead
@@ -72,10 +93,10 @@ def generate_evaluation_data(model_wrapper, model_name, dataset_test):
         generated = '\n'.join([raw_text_sents[i] for i in extracted_index])
         reference = dataset_test.get_raw_summary(i)
 
-        with open(reference_dir + f'{i}_reference.txt', 'w', encoding='utf-8') as ref:
+        with open(reference_dir + f'{i + 1}_reference.txt', 'w', encoding='utf-8') as ref:
             ref.write(reference)
 
-        with open(generated_dir + f'{i}_generated.txt', 'w', encoding='utf-8') as gen:
+        with open(generated_dir + f'{i + 1}_generated.txt', 'w', encoding='utf-8') as gen:
             gen.write(generated)
 
 
