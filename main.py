@@ -171,24 +171,24 @@ def main_eval(args):
     dataset_name = 'cnn_dailymail'
     if test_data == 1:
         dataset_name = 'billsum'
-    test_dataset = ProcessedDataset(dataset_name, split='test')
+    test_dataset = ProcessedDataset(dataset_name, split='test', load_raw=True)
 
     word2v = Word2VecHelper.load_model(f'{dataset_name}_128_min5')
     word_to_index = Word2VecHelper.get_word_to_index(word2v, top_k=30000)
     model_wrapper = None
     if model_type == 0:
         model = SummaryExtractor().to(device)
-        checkpoint = torch.load(f'./pretrained/{model_name}/{model_name}.pt')
+        checkpoint = torch.load(f'./pretrained/{model_name}.pt')
         model.load_state_dict(checkpoint)
         model_wrapper = ExtractorWrapper(model, word_to_index)
     elif model_type == 1:
         model = SummaryExtractorNoCoverage().to(device)
-        checkpoint = torch.load(f'./pretrained/{model_name}/{model_name}.pt')
+        checkpoint = torch.load(f'./pretrained/{model_name}.pt')
         model.load_state_dict(checkpoint)
         model_wrapper = ExtractorNoCoverageWrapper(model, word_to_index)
     elif model_type == 2:
         model = FFSummaryExtractor().to(device)
-        checkpoint = torch.load(f'./pretrained/{model_name}/{model_name}.pt')
+        checkpoint = torch.load(f'./pretrained/{model_name}.pt')
         model.load_state_dict(checkpoint)
         model_wrapper = FFExtractorWrapper(model, word_to_index)
 
@@ -239,3 +239,24 @@ if __name__ == '__main__':
         main_train(args)
 
 
+
+    #
+    # data_index = 69
+    # model_name = '15-03-2022_04-05-17_cnn_dailymail'
+    # dataset = ProcessedDataset('cnn_dailymail', split='test', load_raw=True)
+    # word2v = Word2VecHelper.load_model(f'cnn_dailymail_128_min5')
+    # word_to_index = Word2VecHelper.get_word_to_index(word2v, top_k=30000)
+    # model = SummaryExtractor().to(device)
+    # checkpoint = torch.load(f'./pretrained/{model_name}.pt')
+    # model.load_state_dict(checkpoint)
+    # model_wrapper = ExtractorWrapper(model, word_to_index)
+    # # # text = dataset.get_text(data_index)
+    # # # summ = dataset.get_summary(data_index)
+    # # # label = dataset.get_label(data_index)
+    # # # model_wrapper.comprehensive_test(text, summ, label, data_index, print_text=False, outfile=None)
+    # #
+    # generate_evaluation_data(model_wrapper, model_name, dataset)
+    # evaluator = EvaluateModel(model_name)
+    # cmd = evaluator.generate_evaluate_command()
+    # print("Run the following command in terminal:")
+    # print(cmd)
