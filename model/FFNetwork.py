@@ -29,11 +29,11 @@ class FFNetwork(nn.Module):
         bias = self.bias(torch.ones(doc_len).to(device).unsqueeze(1))
         ext_p = self.wc(_input) + torch.matmul(_input, self.ws(document_vec)).unsqueeze(1) + bias
         ext_p = F.softmax(ext_p, dim=0)
-        return ext_p
+        return ext_p.squeeze()
 
 
 if __name__ == "__main__":
-    sent_vec = torch.ones(5, 10)
-    m = FFNetwork(10, 100)
+    sent_vec = torch.ones(5, 10).to(device)
+    m = FFNetwork(10, 100).to(device)
     out = m(sent_vec)
     print(out)

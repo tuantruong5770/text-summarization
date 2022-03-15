@@ -69,7 +69,7 @@ class FFExtractorWrapper:
         normalized_prob = 1 / len(label)
         for label_index in label:
             labels[label_index] = normalized_prob
-        loss = criterion(output, labels)
+        loss = criterion(output.unsqueeze(0), labels.unsqueeze(0))
         return loss
 
 
@@ -198,7 +198,7 @@ class FFExtractorWrapper:
             f.writelines(lines)
 
 
-    def __call__(self, _input):
+    def __call__(self, _input, summary_length=0):
         return self.forward(_input)
 
 

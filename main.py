@@ -1,4 +1,3 @@
-from summ_extractor_helper import load_model
 from word2vec_helper import Word2VecHelper
 from data_processing import ProcessedDataset
 
@@ -172,24 +171,24 @@ def main_eval(args):
     dataset_name = 'cnn_dailymail'
     if test_data == 1:
         dataset_name = 'billsum'
-    test_dataset = ProcessedDataset(dataset_name, split='test')
+    test_dataset = ProcessedDataset(dataset_name, split='test', load_raw=True)
 
     word2v = Word2VecHelper.load_model(f'{dataset_name}_128_min5')
     word_to_index = Word2VecHelper.get_word_to_index(word2v, top_k=30000)
     model_wrapper = None
     if model_type == 0:
         model = SummaryExtractor().to(device)
-        checkpoint = torch.load(f'./pretrained/{model_name}/{model_name}.pt')
+        checkpoint = torch.load(f'./pretrained/{model_name}.pt')
         model.load_state_dict(checkpoint)
         model_wrapper = ExtractorWrapper(model, word_to_index)
     elif model_type == 1:
         model = SummaryExtractorNoCoverage().to(device)
-        checkpoint = torch.load(f'./pretrained/{model_name}/{model_name}.pt')
+        checkpoint = torch.load(f'./pretrained/{model_name}.pt')
         model.load_state_dict(checkpoint)
         model_wrapper = ExtractorNoCoverageWrapper(model, word_to_index)
     elif model_type == 2:
         model = FFSummaryExtractor().to(device)
-        checkpoint = torch.load(f'./pretrained/{model_name}/{model_name}.pt')
+        checkpoint = torch.load(f'./pretrained/{model_name}.pt')
         model.load_state_dict(checkpoint)
         model_wrapper = FFExtractorWrapper(model, word_to_index)
 
@@ -204,6 +203,19 @@ def main_eval(args):
 
 
 if __name__ == '__main__':
+    """
+    The project is inspired by Fast Abstractive Summarization with Reinforce-Selected Sentence Rewriting
+    Original authors: Yen-Chun Chen and Mohit Bansal
+    PDF: https://arxiv.org/pdf/1805.11080.pdf
+    GitHub: https://github.com/ChenRocks/fast_abs_rl
+    
+    Implementation is inspired by the authors
+    Hyper parameters are tuned by the authors
+    Training parameters are tuned by the authors
+    
+    Our implementation is similar in technique but is written by our team
+    """
+
     parser = argparse.ArgumentParser(description='main')
     parser.add_argument('--train', type=int, action='store', default=0)
     parser.add_argument('--train_opt', type=int, action='store', default=0)
@@ -216,77 +228,35 @@ if __name__ == '__main__':
     parser.add_argument('--test_data', type=int, action='store', default=0)
 
     # Change this to your path to ROUGE-1.5.5.pl script
-    os.environ['ROUGE'] = 'D:\Python\Python39\Lib\site-packages\pyrouge\tools\ROUGE-1.5.5'
+    os.environ['ROUGE'] = r'D:\Python\Python39\Lib\site-packages\pyrouge\tools\ROUGE-1.5.5'
     # Change this to your desire temp directory
-    os.environ['TMP_DIR_PREF'] = 'D:/temp/'
+    os.environ['TMP_DIR_PREF'] = r'D:/temp/'
 
     args = parser.parse_args()
     if args.eval:
         main_eval(args)
     else:
         main_train(args)
+
+
+
     #
-
-    # kwargs = {
-    #     'vector_size': 128,
-    #     'min_count': 5,
-    #     'workers': 16,
-    #     'sg': 1
-    # }
-    # dataset = ProcessedDataset('billsum')
-    # word2v = Word2VecHelper.train_model(dataset, **kwargs)
-    # Word2VecHelper.save_model('billsum_128_min5', word2v)
-    # model = SummaryExtractor().to(device)
-    # word_to_index = Word2VecHelper.get_word_to_index(word2v, top_k=30000)
-    # model.set_embedding(Word2VecHelper.get_embedding(word2v, word_to_index))
-    # model_wrapper = ExtractorWrapper(model, word_to_index)
-    # trainer = Trainer(model_wrapper, dataset)
-    # trainer.train_epoch()
-
-    # num_epochs = 5
-    # batch_size = 32
-    # learning_rate = 0.001
-    # num_training = len(dataset)
-    # teacher_forcing_prob = 0.5
-    # print_per = 500
-    #
-    # train_summ_extractor(model, dataset, num_epochs=num_epochs, batch_size=batch_size, learning_rate=learning_rate,
-    #                      num_training=20000, teacher_forcing_prob=teacher_forcing_prob, print_per=print_per)
-    #
-    # dataset = ProcessedDataset('cnn_dailymail')
-    # word2v = Word2VecHelper.load_model('cnn_dailymail')
-    # model = load_model('05-03-2022_09-00-12_cnn_dailymail', word2v)
-    # test_data_point(model, word2v, dataset, 251277)
-
-    # test_cnn_dailymail_datapoint(0)
-
-    # model_name = '12-03-2022_19-11-51_cnn_dailymail'
-    # word2v_model_name = 'cnn_dailymail_128_min5'
+    # data_index = 69
+    # model_name = '15-03-2022_04-05-17_cnn_dailymail'
     # dataset = ProcessedDataset('cnn_dailymail', split='test', load_raw=True)
-    # word2v = Word2VecHelper.load_model(word2v_model_name)
-    # model = load_model(model_name)
-    # model_wrapper = ExtractorWrapper(model, Word2VecHelper.get_word_to_index(word2v, top_k=30000))
-    # evaluator = EvaluateModel(model_name=model_name)
-    # # generate_evaluation_data(model_wrapper, model_name, dataset)
+    # word2v = Word2VecHelper.load_model(f'cnn_dailymail_128_min5')
+    # word_to_index = Word2VecHelper.get_word_to_index(word2v, top_k=30000)
+    # model = SummaryExtractor().to(device)
+    # checkpoint = torch.load(f'./pretrained/{model_name}.pt')
+    # model.load_state_dict(checkpoint)
+    # model_wrapper = ExtractorWrapper(model, word_to_index)
+    # # # text = dataset.get_text(data_index)
+    # # # summ = dataset.get_summary(data_index)
+    # # # label = dataset.get_label(data_index)
+    # # # model_wrapper.comprehensive_test(text, summ, label, data_index, print_text=False, outfile=None)
+    # #
+    # generate_evaluation_data(model_wrapper, model_name, dataset)
+    # evaluator = EvaluateModel(model_name)
     # cmd = evaluator.generate_evaluate_command()
+    # print("Run the following command in terminal:")
     # print(cmd)
-
-    # data_index = 0
-    # text = dataset.get_text(data_index)
-    # summ = dataset.get_summary(data_index)
-    # label = dataset.get_label(data_index)
-    # model_wrapper.comprehensive_test(text, summ, label, data_index, print_text=True)
-
-    # for i in range(10):
-    #     data_index = 69 + i
-    #     text = dataset.get_text(data_index)
-    #     summ = dataset.get_summary(data_index)
-    #     label = dataset.get_label(data_index)
-    #     model_wrapper.comprehensive_test(text, summ, label, data_index, print_text=False)
-    #
-    # for i in range(10):
-    #     data_index = 100000 + i
-    #     text = dataset.get_text(data_index)
-    #     summ = dataset.get_summary(data_index)
-    #     label = dataset.get_label(data_index)
-    #     model_wrapper.comprehensive_test(text, summ, label, data_index, print_text=False)
