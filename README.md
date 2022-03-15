@@ -21,7 +21,7 @@ Training parameters are tuned by the authors
 Our implementation is similar in technique but is written by our team
 
 
-File description in ./src
+# File description in ./src
 
 main.py: Main (terminal) program use to train and generate model evaluation
 
@@ -33,7 +33,7 @@ word2vec_helper: Helper function for loading, training, saving, etc... for word2
 
 evaluate: Evaluate command cript generator (Windows 10)
 
-File description in ./src/model
+# File description in ./src/model
 
 ConvSentEncoder.py: Convolutional sentence encoder model
 
