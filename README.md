@@ -4,12 +4,16 @@ An implementation of extractive text summarization model based on a model propos
 UCI CS-175 Project
 
 The project is inspired by Fast Abstractive Summarization with Reinforce-Selected Sentence Rewriting
+
 Original authors: Yen-Chun Chen and Mohit Bansal
+
 PDF: https://arxiv.org/pdf/1805.11080.pdf
+
 GitHub: https://github.com/ChenRocks/fast_abs_rl
 
 
 Hyper parameters and Training parameters are taken from the original paper.
+
 We implement a hierarchichal neural network for extractive text summarization based on the extractive neural network from the original paper.
 
 
